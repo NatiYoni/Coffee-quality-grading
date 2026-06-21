@@ -217,7 +217,7 @@ func forwardToPython(endpoint string, payload interface{}) (*http.Response, erro
 	}
  
 	client := http.Client{Timeout: 20 * time.Second}
-	maxAttempts := 6
+	maxAttempts := 15
 	var lastErr error
  
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
