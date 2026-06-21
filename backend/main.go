@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"net/http"
 	"os"
 	"time"
@@ -215,37 +214,10 @@ func forwardToPython(endpoint string, payload interface{}) (*http.Response, erro
 	if err != nil {
 		return nil, err
 	}
- 
-	client := http.Client{Timeout: 20 * time.Second}
-	maxAttempts := 15
-	var lastErr error
- 
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		resp, err := client.Post(
-			pythonServiceURL+endpoint,
-			"application/json",
-			bytes.NewBuffer(body),
-		)
-		if err != nil {
-			lastErr = err
-			time.Sleep(10 * time.Second)
-			continue
-		}
- 
-		// Render's free-tier "waking up" placeholder returns HTML, not JSON.
-		// A real FastAPI response sets Content-Type: application/json.
-		contentType := resp.Header.Get("Content-Type")
-		if strings.Contains(contentType, "application/json") {
-			return resp, nil // success - service is awake and responded properly
-		}
- 
-		// Not JSON yet - service is likely still waking up. Discard this
-		// response and wait before retrying.
-		resp.Body.Close()
-		lastErr = fmt.Errorf("ml_service not ready yet (attempt %d/%d, got content-type: %s)", attempt, maxAttempts, contentType)
-		time.Sleep(10 * time.Second)
-	}
- 
-	return nil, fmt.Errorf("ml_service did not become ready after %d attempts: %v", maxAttempts, lastErr)
+
+	return http.Post(
+		pythonServiceURL+endpoint,
+		"application/json",
+		bytes.NewBuffer(body),
+	)
 }
- 
