@@ -7,7 +7,6 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import shap
 import tensorflow as tf
-from roboflow import Roboflow
 
 app = FastAPI(title="Coffee Quality ML Service", version="1.0.0")
 
