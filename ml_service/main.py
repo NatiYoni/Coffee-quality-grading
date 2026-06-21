@@ -1,15 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import joblib, json, os, base64, tempfile, logging
+import joblib, json, os, base64, tempfile
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import shap
 import tensorflow as tf
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="Coffee Quality ML Service", version="1.0.0")
 
@@ -32,9 +29,6 @@ feature_cols = None
 roast_model = None
 roast_classes = None
 regions_data = None
-defect_model = None
-defect_classes = None
-
 
 class PredictRequest(BaseModel):
     features: dict
@@ -44,7 +38,6 @@ class PredictRoastRequest(BaseModel):
 
 class PredictDefectRequest(BaseModel):
     image_base64: str
-
 
 @app.on_event("startup")
 def load_models():
@@ -76,52 +69,14 @@ def load_models():
     with open(os.path.join(MODELS_DIR, "defect_classes.json")) as f:
         defect_classes = json.load(f)
 
-    logger.info(f"roast_model input shape: {roast_model.input_shape}")
-    logger.info(f"defect_model input shape: {defect_model.input_shape}")
-    logger.info(f"roast_classes: {roast_classes}")
-    logger.info(f"defect_classes: {defect_classes}")
-    logger.info("All models loaded successfully.")
-
-
-def idx_to_class_name(classes, idx):
-    """Handles both list format (['black','broken',...]) and dict format ({'black':0,...})."""
-    if isinstance(classes, list):
-        return classes[idx]
-    if isinstance(classes, dict):
-        # could be {name: index} or {index: name}
-        inverted = {v: k for k, v in classes.items()}
-        if idx in inverted:
-            return inverted[idx]
-        if str(idx) in classes:
-            return classes[str(idx)]
-    raise ValueError(f"Could not resolve class name for index {idx} in {classes}")
-
-
-def get_target_size(model, fallback=(224, 224)):
-    """Reads the model's actual expected input size instead of hardcoding it."""
-    try:
-        shape = model.input_shape  # e.g. (None, 224, 224, 3)
-        h, w = shape[1], shape[2]
-        if h and w:
-            return (w, h)  # PIL expects (width, height)
-    except Exception:
-        pass
-    return fallback
-
-
-@app.get("/")
-def root():
-    return {"status": "ok", "service": "coffee-quality-ml-service"}
-
+    print("All models loaded successfully.")
 
 @app.get("/health")
 def health():
     return {"status": "ok", "modelsLoaded": all([
         xgb_model, shap_explainer, kmeans_model, scaler,
-        cluster_labels, feature_cols, roast_model, roast_classes,
-        defect_model, defect_classes
+        cluster_labels, feature_cols, roast_model, roast_classes
     ])}
-
 
 @app.post("/predict")
 def predict(req: PredictRequest):
@@ -169,60 +124,50 @@ def predict(req: PredictRequest):
             "counterfactual": counterfactual
         }
     except Exception as e:
-        logger.exception(f"/predict failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/predict-roast")
 def predict_roast(req: PredictRoastRequest):
-    tmp_path = None
     try:
         img_data = base64.b64decode(req.image_base64)
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             tmp.write(img_data)
             tmp_path = tmp.name
 
-        target_size = get_target_size(roast_model)
-        img = tf.keras.preprocessing.image.load_img(tmp_path, target_size=target_size)
+        img = tf.keras.preprocessing.image.load_img(tmp_path, target_size=(224, 224))
         arr = tf.keras.preprocessing.image.img_to_array(img) / 255.0
         arr = np.expand_dims(arr, axis=0)
         preds = roast_model.predict(arr)
         idx = int(np.argmax(preds[0]))
         confidence = float(preds[0][idx])
 
-        class_name = idx_to_class_name(roast_classes, idx)
-
+        os.remove(tmp_path)
         return {
-            "roastLevel": str(class_name).lower(),
+            "roastLevel": roast_classes[idx].lower(),
             "confidence": round(confidence * 100, 1)
         }
     except Exception as e:
-        logger.exception(f"/predict-roast failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
 
 @app.post("/predict-defect")
 def predict_defect(req: PredictDefectRequest):
-    tmp_path = None
     try:
         img_data = base64.b64decode(req.image_base64)
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             tmp.write(img_data)
             tmp_path = tmp.name
 
-        target_size = get_target_size(defect_model)
-        img = tf.keras.preprocessing.image.load_img(tmp_path, target_size=target_size)
+        img = tf.keras.preprocessing.image.load_img(tmp_path, target_size=(224, 224))
         arr = tf.keras.preprocessing.image.img_to_array(img) / 255.0
         arr = np.expand_dims(arr, axis=0)
         preds = defect_model.predict(arr)
         idx = int(np.argmax(preds[0]))
         confidence = float(preds[0][idx])
 
-        class_name = idx_to_class_name(defect_classes, idx)
-        is_defective = str(class_name).lower() != "good"
+        os.remove(tmp_path)
+
+        class_name = {v: k for k, v in defect_classes.items()}[idx]
+        is_defective = class_name.lower() != "good" if "good" in defect_classes else True
 
         return {
             "defects": [{
@@ -232,12 +177,7 @@ def predict_defect(req: PredictDefectRequest):
             "isDefective": is_defective
         }
     except Exception as e:
-        logger.exception(f"/predict-defect failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
 
 @app.get("/regions")
 def get_regions():
