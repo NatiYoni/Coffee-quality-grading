@@ -195,7 +195,7 @@ func handleRegions(c *gin.Context) {
 }
 
 func handleHealth(c *gin.Context) {
-	client := http.Client{Timeout: 2 * time.Second}
+	client := http.Client{Timeout: 90 * time.Second}
 	pyResp, err := client.Get(pythonServiceURL + "/health")
 	pyHealthy := err == nil && pyResp.StatusCode == 200
 	if pyResp != nil {
