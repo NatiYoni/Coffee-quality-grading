@@ -19,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "outputs", "models")
+MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "notebooks", "outputs", "models")
 
 xgb_model = None
 shap_explainer = None
