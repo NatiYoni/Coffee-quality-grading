@@ -1,0 +1,48 @@
+============================================================
+DATASET SUMMARY
+============================================================
+Total rows used for training/testing: 207
+Number of features: 13
+Train rows: 155 | Test rows: 52
+Target variable: Total Cup Points
+Target range: 78.0 - 89.3, mean: 83.71
+
+============================================================
+MODEL 1 RESULTS: Linear Regression (Baseline)
+============================================================
+Train RMSE: 0.109
+Test  RMSE: 0.128
+Train R2:   0.996
+Test  R2:   0.994
+5-Fold CV R2 scores: [0.993 0.996 0.979 0.997 0.997]
+5-Fold CV R2 mean:   0.992 (+/- 0.007)
+
+============================================================
+MODEL 2 RESULTS: XGBoost Regressor (Tuned)
+============================================================
+Best hyperparameters: {'learning_rate': 0.05, 'max_depth': 3, 'n_estimators': 300}
+Train RMSE: 0.065
+Test  RMSE: 0.341
+Train R2:   0.999
+Test  R2:   0.960
+5-Fold CV R2 scores: [0.948 0.975 0.946 0.979 0.942]
+5-Fold CV R2 mean:   0.958 (+/- 0.015)
+
+============================================================
+MODEL COMPARISON SUMMARY
+============================================================
+Metric              Linear Regression     XGBoost        
+Test RMSE           0.128                 0.341          
+Test R2             0.994                 0.960          
+CV R2 mean          0.992                 0.958          
+
+============================================================
+MODEL 3: K-MEANS CLUSTERING SUMMARY
+============================================================
+Number of clusters: 4
+Inertia (final): 20.88
+Cluster centers (Aroma, Flavor, Acidity, Body, Balance):
+  Cluster 0 (Bright & Floral): [8.17 8.19 8.07 7.98 8.05]
+  Cluster 1 (Earthy & Full-bodied): [7.64 7.67 7.63 7.6  7.59]
+  Cluster 2 (Balanced & Sweet): [7.89 7.92 7.85 7.77 7.79]
+  Cluster 3 (Mild & Neutral): [7.35 7.35 7.33 7.32 7.28]

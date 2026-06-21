@@ -1,0 +1,42 @@
+[
+  {
+    "Region": "Addis Ababa",
+    "avgScore": 84.29896545410156,
+    "sampleCount": 1
+  },
+  {
+    "Region": "Ethiopia",
+    "avgScore": 84.43336486816406,
+    "sampleCount": 1
+  },
+  {
+    "Region": "Gedeb,Yirgacheffe,Sidamo",
+    "avgScore": 86.1069107055664,
+    "sampleCount": 1
+  },
+  {
+    "Region": "Guji",
+    "avgScore": 86.28477478027344,
+    "sampleCount": 2
+  },
+  {
+    "Region": "OROMIA",
+    "avgScore": 84.40095520019531,
+    "sampleCount": 2
+  },
+  {
+    "Region": "Oromia",
+    "avgScore": 85.36912536621094,
+    "sampleCount": 1
+  },
+  {
+    "Region": "Sidama",
+    "avgScore": 83.97846984863281,
+    "sampleCount": 2
+  },
+  {
+    "Region": "Southern Ethiopia Guji",
+    "avgScore": 85.34174346923828,
+    "sampleCount": 1
+  }
+]

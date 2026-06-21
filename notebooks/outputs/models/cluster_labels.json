@@ -1,0 +1,18 @@
+{
+  "0": {
+    "name": "Bright & Floral",
+    "description": "High acidity and aroma"
+  },
+  "1": {
+    "name": "Earthy & Full-bodied",
+    "description": "High body, lower acidity"
+  },
+  "2": {
+    "name": "Balanced & Sweet",
+    "description": "High balance and sweetness"
+  },
+  "3": {
+    "name": "Mild & Neutral",
+    "description": "Lower scores across all sensory features"
+  }
+}
