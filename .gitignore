@@ -22,3 +22,4 @@ build/
 # --- Secrets / local config ---
 .env
 backend/.env
+.next/
