@@ -1,0 +1,11 @@
+{
+  "black": 0,
+  "broken": 1,
+  "foreign": 2,
+  "fraghusk": 3,
+  "green": 4,
+  "husk": 5,
+  "immature": 6,
+  "infested": 7,
+  "sour": 8
+}
