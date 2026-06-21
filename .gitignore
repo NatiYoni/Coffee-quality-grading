@@ -1,9 +1,4 @@
-coffee-bean-defect/
 data/coffee-bean-defect/
-outputs/models/*.h5
-outputs/models/*.pkl
-notebooks/outputs/models/*.h5
-notebooks/outputs/models/*.pkl
 .ipynb_checkpoints/
 *-checkpoint.ipynb
 __pycache__/
