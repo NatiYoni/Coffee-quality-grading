@@ -1,0 +1,60 @@
+============================================================
+MODEL 2: ROAST LEVEL CLASSIFIER (MobileNetV2 Transfer Learning)
+============================================================
+Dataset source: kagglehub - gpiosenka/coffee-bean-dataset-resized-224-x-224
+Classes found: {'Dark': 0, 'Green': 1, 'Light': 2, 'Medium': 3}
+Number of classes: 4
+Training images: 1200
+Validation/test images: 400
+Image size: 224x224x3
+Batch size: 32
+Epochs trained: 10
+
+ARCHITECTURE
+------------------------------------------------------------
+Base: MobileNetV2 (pretrained on ImageNet, frozen)
+Head: GlobalAveragePooling2D -> Dense(128, relu) -> Dense(4, softmax)
+Optimizer: Adam | Loss: categorical_crossentropy
+
+TRAINING HISTORY (per epoch)
+------------------------------------------------------------
+Epoch   Train Acc   Val Acc     Train Loss  Val Loss    
+1       0.8125      0.9775      0.5316      0.1014      
+2       0.9667      0.9775      0.1107      0.0738      
+3       0.9783      0.9850      0.0756      0.0496      
+4       0.9825      0.9775      0.0585      0.0660      
+5       0.9858      0.9950      0.0533      0.0218      
+6       0.9925      0.9925      0.0352      0.0303      
+7       0.9900      0.9925      0.0335      0.0319      
+8       0.9883      1.0000      0.0357      0.0154      
+9       0.9908      0.9975      0.0346      0.0263      
+10      0.9908      0.9950      0.0261      0.0174      
+
+FINAL / BEST RESULTS
+------------------------------------------------------------
+Best Val Accuracy: 1.0000 (epoch 8)
+Final Train Accuracy: 0.9908
+Final Val Accuracy: 0.9950
+Final Train Loss: 0.0261
+Final Val Loss: 0.0174
+
+CLASSIFICATION REPORT (on validation/test set)
+------------------------------------------------------------
+              precision    recall  f1-score   support
+
+        Dark       1.00      0.99      0.99       100
+       Green       1.00      1.00      1.00       100
+       Light       1.00      0.99      0.99       100
+      Medium       0.98      1.00      0.99       100
+
+    accuracy                           0.99       400
+   macro avg       1.00      0.99      1.00       400
+weighted avg       1.00      0.99      1.00       400
+
+CONFUSION MATRIX (rows=true, cols=predicted)
+------------------------------------------------------------
+Classes order: ['Dark', 'Green', 'Light', 'Medium']
+[[ 99   0   0   1]
+ [  0 100   0   0]
+ [  0   0  99   1]
+ [  0   0   0 100]]
