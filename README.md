@@ -63,7 +63,7 @@ A **Next.js + Go + FastAPI** full-stack application exposes all models through a
 2. The frontend calls the **Go backend** REST API (port 8000)
 3. Go proxies ML inference requests to the **FastAPI microservice** (port 8001)
 4. FastAPI loads trained models and returns predictions + SHAP values
-5. Go formats the response and optionally enriches it via the Anthropic API (plain-language explanation)
+5. Go formats the response and optionally enriches it via the Gemini API (plain-language explanation)
 
 ---
 
@@ -182,7 +182,7 @@ Unsupervised segmentation of coffees into flavor profiles for market positioning
 - Go 1.21+
 - Node.js 18+
 - Kaggle account (for dataset download)
-- Anthropic API key (for plain-language explanations)
+- Gemini API key (for plain-language explanations)
 
 ---
 
@@ -226,7 +226,7 @@ Verify it's running: `curl http://localhost:8001/health`
 ```bash
 cd backend
 cp .env.example .env
-# Edit .env with your ANTHROPIC_API_KEY and other settings
+# Edit .env with your Gemini_API_KEY and other settings
 go mod tidy
 go run main.go
 ```
@@ -307,7 +307,7 @@ curl -X POST http://localhost:8000/api/predict \
 
 ```env
 PYTHON_SERVICE_URL=http://localhost:8001
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+Gemini_API_KEY=your_Gemini_api_key_here
 PORT=8000
 ```
 
@@ -352,7 +352,7 @@ All tested Ethiopian regions exceed the SCA Specialty Grade threshold of 80 poin
 | **Backend** | Go, Gin framework |
 | **Frontend** | Next.js 14, React 18, Tailwind CSS, Lucide icons |
 | **Data Sources** | Kaggle (CQI cupping data, coffee bean images), Roboflow Universe (defect images) |
-| **Explainability** | SHAP TreeExplainer + Anthropic API (plain-language summaries) |
+| **Explainability** | SHAP TreeExplainer + Gemini API (plain-language summaries) |
 
 ---
 
