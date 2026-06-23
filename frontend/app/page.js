@@ -19,13 +19,13 @@ export default function Home() {
             <div className="mt-8 flex gap-4 justify-center">
               <Link
                 href="/predict"
-                className="bg-white text-amber-700 px-6 py-3 rounded-lg font-semibold hover:bg-amber-50 transition"
+                className="bg-white text-amber-700 px-6 py-3 rounded-lg font-semibold hover:bg-amber-50 transition-colors"
               >
                 Start Predicting
               </Link>
               <Link
                 href="/explore"
-                className="border-2 border-white text-white px-6 py-3 rounded-lg font-semibold hover:bg-amber-700 transition"
+                className="border-2 border-white text-white px-6 py-3 rounded-lg font-semibold hover:bg-amber-700 transition-colors"
               >
                 Explore Regions
               </Link>
@@ -76,27 +76,27 @@ export default function Home() {
             Features
           </h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <Link href="/predict" className="block p-6 border border-gray-200 rounded-lg hover:shadow-lg transition">
+            <Link href="/predict" className="block p-6 border border-gray-200 rounded-lg hover:shadow-lg transition-shadow contain-content">
               <BarChart3 className="w-10 h-10 text-amber-700 mb-3" />
               <h3 className="text-lg font-semibold mb-2">Quality Predictor</h3>
               <p className="text-gray-600">Predict coffee quality scores from sensory and origin data.</p>
             </Link>
-            <Link href="/predict/roast" className="block p-6 border border-gray-200 rounded-lg hover:shadow-lg transition">
+            <Link href="/predict/roast" className="block p-6 border border-gray-200 rounded-lg hover:shadow-lg transition-shadow contain-content">
               <Camera className="w-10 h-10 text-amber-700 mb-3" />
               <h3 className="text-lg font-semibold mb-2">Roast Classifier</h3>
               <p className="text-gray-600">Upload a bean photo to identify roast level (green, light, medium, dark).</p>
             </Link>
-            <Link href="/predict/defect" className="block p-6 border border-gray-200 rounded-lg hover:shadow-lg transition">
+            <Link href="/predict/defect" className="block p-6 border border-gray-200 rounded-lg hover:shadow-lg transition-shadow contain-content">
               <Camera className="w-10 h-10 text-amber-700 mb-3" />
               <h3 className="text-lg font-semibold mb-2">Defect Detector</h3>
               <p className="text-gray-600">Detect bean defects using computer vision and Roboflow.</p>
             </Link>
-            <Link href="/compare" className="block p-6 border border-gray-200 rounded-lg hover:shadow-lg transition">
+            <Link href="/compare" className="block p-6 border border-gray-200 rounded-lg hover:shadow-lg transition-shadow contain-content">
               <GitCompare className="w-10 h-10 text-amber-700 mb-3" />
               <h3 className="text-lg font-semibold mb-2">Compare Coffees</h3>
               <p className="text-gray-600">Side-by-side comparison of two coffee samples with key differences.</p>
             </Link>
-            <Link href="/explore" className="block p-6 border border-gray-200 rounded-lg hover:shadow-lg transition">
+            <Link href="/explore" className="block p-6 border border-gray-200 rounded-lg hover:shadow-lg transition-shadow contain-content">
               <MapPin className="w-10 h-10 text-amber-700 mb-3" />
               <h3 className="text-lg font-semibold mb-2">Explore Regions</h3>
               <p className="text-gray-600">Interactive map of Ethiopian coffee regions with quality rankings.</p>
