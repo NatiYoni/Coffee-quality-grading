@@ -1,7 +1,7 @@
 import './globals.css'
 import { Inter } from 'next/font/google'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], display: 'swap' })
 
 export const metadata = {
   title: 'Ethiopian Coffee Quality Predictor',
@@ -11,6 +11,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="prefetch" href="/api/health" as="fetch" crossOrigin="anonymous" />
+      </head>
       <body className={inter.className}>{children}</body>
     </html>
   )
