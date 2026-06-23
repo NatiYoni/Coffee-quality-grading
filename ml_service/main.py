@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib, json, os, base64, tempfile, logging
+from io import BytesIO
+from PIL import Image
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
@@ -175,18 +177,18 @@ def predict(req: PredictRequest):
 
 @app.post("/predict-roast")
 def predict_roast(req: PredictRoastRequest):
-    tmp_path = None
     try:
         img_data = base64.b64decode(req.image_base64)
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-            tmp.write(img_data)
-            tmp_path = tmp.name
-
         target_size = get_target_size(roast_model)
-        img = tf.keras.preprocessing.image.load_img(tmp_path, target_size=target_size)
+
+        img = Image.open(BytesIO(img_data))
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        img = img.resize(target_size)
+
         arr = tf.keras.preprocessing.image.img_to_array(img) / 255.0
         arr = np.expand_dims(arr, axis=0)
-        preds = roast_model.predict(arr)
+        preds = roast_model(arr, training=False).numpy()
         idx = int(np.argmax(preds[0]))
         confidence = float(preds[0][idx])
 
@@ -199,25 +201,22 @@ def predict_roast(req: PredictRoastRequest):
     except Exception as e:
         logger.exception(f"/predict-roast failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
 
 
 @app.post("/predict-defect")
 def predict_defect(req: PredictDefectRequest):
-    tmp_path = None
     try:
         img_data = base64.b64decode(req.image_base64)
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-            tmp.write(img_data)
-            tmp_path = tmp.name
-
         target_size = get_target_size(defect_model)
-        img = tf.keras.preprocessing.image.load_img(tmp_path, target_size=target_size)
+
+        img = Image.open(BytesIO(img_data))
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        img = img.resize(target_size)
+
         arr = tf.keras.preprocessing.image.img_to_array(img) / 255.0
         arr = np.expand_dims(arr, axis=0)
-        preds = defect_model.predict(arr)
+        preds = defect_model(arr, training=False).numpy()
         idx = int(np.argmax(preds[0]))
         confidence = float(preds[0][idx])
 
@@ -234,9 +233,6 @@ def predict_defect(req: PredictDefectRequest):
     except Exception as e:
         logger.exception(f"/predict-defect failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
 
 
 @app.get("/regions")
