@@ -1,14 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import joblib, json, os, base64, tempfile, logging
+import binascii, joblib, json, os, base64, logging
 from io import BytesIO
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
-import shap
-import tensorflow as tf
+
+# TensorFlow and SHAP are imported lazily inside load_models() so the API layer
+# can be imported and tested without the heavy ML runtime installed.
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("uvicorn.error")
@@ -37,6 +37,9 @@ regions_data = None
 defect_model = None
 defect_classes = None
 
+SENSORY_COLS = ['Aroma', 'Flavor', 'Acidity', 'Body', 'Balance']
+SPECIALTY_THRESHOLD = 80
+
 
 class PredictRequest(BaseModel):
     features: dict
@@ -53,6 +56,9 @@ def load_models():
     global xgb_model, shap_explainer, kmeans_model, scaler
     global cluster_labels, feature_cols, roast_model, roast_classes, regions_data
     global defect_model, defect_classes
+
+    import shap  # noqa: F401  (needed to unpickle the TreeExplainer)
+    import tensorflow as tf
 
     xgb_model = joblib.load(os.path.join(MODELS_DIR, "xgb_model.pkl"))
     shap_explainer = joblib.load(os.path.join(MODELS_DIR, "shap_explainer.pkl"))
@@ -111,6 +117,40 @@ def get_target_size(model, fallback=(224, 224)):
     return fallback
 
 
+def decode_image(image_base64: str, model) -> np.ndarray:
+    """Base64 -> normalised (1, H, W, 3) float32 batch. Raises 400 on bad input."""
+    try:
+        img_data = base64.b64decode(image_base64, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="image_base64 is not valid base64")
+    try:
+        img = Image.open(BytesIO(img_data))
+        img.load()
+    except (UnidentifiedImageError, OSError):
+        raise HTTPException(status_code=400, detail="image_base64 does not decode to a supported image")
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    img = img.resize(get_target_size(model))
+    arr = np.asarray(img, dtype=np.float32) / 255.0
+    return np.expand_dims(arr, axis=0)
+
+
+def require_loaded(*objects):
+    """503 (not 500) while models are still loading or failed to load."""
+    if any(o is None for o in objects):
+        raise HTTPException(status_code=503, detail="Models are not loaded")
+
+
+def classify_image(model, classes, image_base64: str):
+    """Shared roast/defect path: returns (class_name, confidence_percent)."""
+    require_loaded(model, classes)
+    arr = decode_image(image_base64, model)
+    preds = model(arr, training=False).numpy()
+    idx = int(np.argmax(preds[0]))
+    confidence = float(preds[0][idx])
+    return idx_to_class_name(classes, idx), round(confidence * 100, 1)
+
+
 @app.get("/")
 def root():
     return {"status": "ok", "service": "coffee-quality-ml-service"}
@@ -118,15 +158,20 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "modelsLoaded": all([
+    loaded = [
         xgb_model, shap_explainer, kmeans_model, scaler,
         cluster_labels, feature_cols, roast_model, roast_classes,
-        defect_model, defect_classes
-    ])}
+        defect_model, defect_classes,
+    ]
+    return {"status": "ok", "modelsLoaded": all(x is not None for x in loaded)}
 
 
 @app.post("/predict")
 def predict(req: PredictRequest):
+    require_loaded(xgb_model, shap_explainer, kmeans_model, scaler, cluster_labels, feature_cols)
+    missing = [c for c in SENSORY_COLS if c not in req.features]
+    if missing:
+        raise HTTPException(status_code=422, detail=f"Missing required sensory features: {missing}")
     try:
         input_df = pd.DataFrame([req.features])
         for col in feature_cols:
@@ -147,8 +192,7 @@ def predict(req: PredictRequest):
             for i in top_idx
         ]
 
-        sensory_cols = ['Aroma', 'Flavor', 'Acidity', 'Body', 'Balance']
-        sensory_input = pd.DataFrame([req.features])[sensory_cols].values
+        sensory_input = pd.DataFrame([req.features])[SENSORY_COLS].values
         cluster_id = int(kmeans_model.predict(sensory_input)[0])
         flavor_cluster = {
             "id": cluster_id,
@@ -156,9 +200,9 @@ def predict(req: PredictRequest):
             "description": cluster_labels[str(cluster_id)]["description"]
         }
 
-        grade = "Specialty" if score >= 80 else "Below Specialty"
+        grade = "Specialty" if score >= SPECIALTY_THRESHOLD else "Below Specialty"
         counterfactual = None
-        if score < 80:
+        if score < SPECIALTY_THRESHOLD:
             counterfactual = {
                 "suggestion": "Consider improving processing method or growing conditions."
             }
@@ -177,62 +221,27 @@ def predict(req: PredictRequest):
 
 @app.post("/predict-roast")
 def predict_roast(req: PredictRoastRequest):
-    try:
-        img_data = base64.b64decode(req.image_base64)
-        target_size = get_target_size(roast_model)
-
-        img = Image.open(BytesIO(img_data))
-        if img.mode != "RGB":
-            img = img.convert("RGB")
-        img = img.resize(target_size)
-
-        arr = tf.keras.preprocessing.image.img_to_array(img) / 255.0
-        arr = np.expand_dims(arr, axis=0)
-        preds = roast_model(arr, training=False).numpy()
-        idx = int(np.argmax(preds[0]))
-        confidence = float(preds[0][idx])
-
-        class_name = idx_to_class_name(roast_classes, idx)
-
-        return {
-            "roastLevel": str(class_name).lower(),
-            "confidence": round(confidence * 100, 1)
-        }
-    except Exception as e:
-        logger.exception(f"/predict-roast failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    class_name, confidence = classify_image(roast_model, roast_classes, req.image_base64)
+    return {
+        "roastLevel": str(class_name).lower(),
+        "confidence": confidence
+    }
 
 
 @app.post("/predict-defect")
 def predict_defect(req: PredictDefectRequest):
-    try:
-        img_data = base64.b64decode(req.image_base64)
-        target_size = get_target_size(defect_model)
+    class_name, confidence = classify_image(defect_model, defect_classes, req.image_base64)
+    # NOTE: the training data has no "good"/no-defect class, so this flag is
+    # currently always True. See README "Limitations & Evaluation Notes".
+    is_defective = str(class_name).lower() != "good"
 
-        img = Image.open(BytesIO(img_data))
-        if img.mode != "RGB":
-            img = img.convert("RGB")
-        img = img.resize(target_size)
-
-        arr = tf.keras.preprocessing.image.img_to_array(img) / 255.0
-        arr = np.expand_dims(arr, axis=0)
-        preds = defect_model(arr, training=False).numpy()
-        idx = int(np.argmax(preds[0]))
-        confidence = float(preds[0][idx])
-
-        class_name = idx_to_class_name(defect_classes, idx)
-        is_defective = str(class_name).lower() != "good"
-
-        return {
-            "defects": [{
-                "class": class_name,
-                "confidence": round(confidence * 100, 1),
-            }],
-            "isDefective": is_defective
-        }
-    except Exception as e:
-        logger.exception(f"/predict-defect failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "defects": [{
+            "class": class_name,
+            "confidence": confidence,
+        }],
+        "isDefective": is_defective
+    }
 
 
 @app.get("/regions")
