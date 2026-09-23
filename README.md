@@ -1,7 +1,7 @@
 # Coffee Quality Intelligence
 ### Machine Learning System for Ethiopian Coffee Quality Prediction, Grading & Analysis
 
-> Predicts specialty coffee quality scores from cupping data, classifies roast levels and defect types from bean imagery, segments flavor profiles via clustering, and attaches per-prediction SHAP feature attributions — with a full-stack web application for producers, buyers, and researchers.
+> Predicts specialty coffee quality scores from cupping data, classifies roast levels and defect types from bean imagery, and attaches SHAP feature attributions. An optional Gemini integration selects evidence-backed explanation points, with server-side validation and plain-language rendering.
 
 ---
 
@@ -38,7 +38,7 @@ This project applies machine learning to automate and standardize three core gra
 | Bean defect classification | MobileNetV2 CNN (9 defect classes) | Held-out test accuracy = 87% |
 | Flavor profile segmentation | K-Means clustering (k = 4) | 4 sensory clusters |
 
-A **Next.js + Go + FastAPI** full-stack application exposes all models through a web interface, with per-prediction SHAP feature attributions, side-by-side sample comparison, and an Ethiopian regional quality explorer.
+A **Next.js + Go + FastAPI** full-stack application exposes the models through a web interface, with per-prediction SHAP feature attributions, on-demand evidence-checked explanations, side-by-side sample comparison, and an Ethiopian regional quality explorer.
 
 ---
 
@@ -66,7 +66,8 @@ A **Next.js + Go + FastAPI** full-stack application exposes all models through a
 2. The frontend calls the **Go backend** REST API (port 8000)
 3. Go proxies ML inference requests to the **FastAPI microservice** (port 8001)
 4. FastAPI loads trained models and returns predictions + SHAP values
-5. Go forwards the ML service response to the frontend (there is no LLM step — see [Roadmap](#13-roadmap))
+5. Go forwards the ML service response to the frontend, preserving success and error status codes for prediction requests.
+6. Only when the user clicks **Explain this prediction**, FastAPI recomputes the evidence, requests a structured explanation plan from Gemini, validates it, and renders supported statements. No Gemini call is made by `/predict`.
 
 ---
 
@@ -83,7 +84,10 @@ coffee-quality-grading/
 │
 ├── ml_service/
 │   ├── main.py                      # FastAPI app (port 8001)
-│   ├── models/                      # Artifacts served in production (Git LFS)
+│   ├── explanations.py              # Gemini client, evidence checks and safe text rendering
+│   ├── evaluate_explanations.py      # Offline guardrail and opt-in live generation evaluation
+│   ├── evals/                       # Synthetic evidence and adversarial explanation cases
+│   ├── models/                      # Artifacts loaded by the inference service (Git LFS)
 │   ├── tests/                       # pytest suite for the API layer (see §11)
 │   ├── requirements.txt             # Runtime deps (TensorFlow, XGBoost, SHAP, …)
 │   ├── requirements-test.txt        # Light test deps (no TF / XGBoost / SHAP)
@@ -111,7 +115,7 @@ coffee-quality-grading/
 │
 ├── coffee-bean-defect/              # Defect image dataset (Roboflow Universe, CC BY 4.0)
 ├── documentation/                   # Technical report (.docx) and presentation (.pptx)
-├── .github/workflows/               # CI: ml_service tests on every push / PR
+├── .github/workflows/               # CI: Python evaluation, Go tests and browser checks
 └── README.md
 ```
 
@@ -231,6 +235,8 @@ uvicorn main:app --host 0.0.0.0 --port 8001
 
 Verify it's running: `curl http://localhost:8001/health`
 
+Gemini is optional. To enable the explanation button, follow the ML-service configuration in [§8](#8-environment-variables). Never put an API key in frontend code.
+
 ### Step 4 — Start the Go backend
 
 ```bash
@@ -262,6 +268,7 @@ Open [http://localhost:3000](http://localhost:3000)
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/predict` | Predict quality score from cupping features; returns score + SHAP + cluster |
+| `POST` | `/api/explain` | Generate an evidence-checked explanation for a complete numeric sample |
 | `POST` | `/api/compare` | Side-by-side comparison of two coffee samples |
 | `POST` | `/api/predict-roast` | Classify roast level from uploaded bean image |
 | `POST` | `/api/predict-defect` | Classify the defect type in an uploaded bean image |
@@ -273,6 +280,7 @@ Open [http://localhost:3000](http://localhost:3000)
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/predict` | XGBoost inference + SHAP values + K-Means cluster assignment |
+| `POST` | `/explain` | Recompute prediction evidence, validate Gemini's plan, render supported statements |
 | `POST` | `/predict-roast` | CNN roast level classification |
 | `POST` | `/predict-defect` | CNN defect-type classification (top class + confidence) |
 | `GET`  | `/regions` | Precomputed regional quality statistics |
@@ -298,6 +306,29 @@ curl -X POST http://localhost:8000/api/predict \
 
 The response contains `score`, `grade` (`Specialty` at ≥ 80 points, otherwise `Below Specialty`), `shap` (top-4 feature attributions with `direction`), `flavorCluster` (`id`, `name`, `description`) and `counterfactual` (a hint, only for below-specialty coffees).
 
+### Evidence-checked explanations
+
+Send the same numeric `features` object to `POST /api/explain`. Unlike `/predict`, this endpoint requires **all 13 training features**, finite JSON numbers, and no additional fields. It does not accept a client-supplied score, SHAP values, or a free-text prompt.
+
+1. The ML service recomputes the score, grade, and top SHAP attributions from the submitted features.
+2. Gemini receives only that derived evidence. It chooses the order, supported features, directions, and one of two approved wording styles. It cannot supply numbers, grades, advice, or arbitrary prose.
+3. The validator rejects unknown or duplicate features, reversed contribution directions, additional fields, and omission of the strongest positive or negative driver when present.
+4. The server renders sentences using the actual evidence values. The response includes `method: "validated_evidence_plan"`, the requested `model`, `sentences` with `evidence_id` citations, the source `evidence`, and explanatory `notes`.
+
+This is **constrained, LLM-assisted explanation planning**, not free-form generation, RAG, or an agent. The restricted output makes the displayed facts checkable; it does not establish the accuracy of the underlying ML models or turn SHAP associations into causal recommendations.
+
+The browser shows supporting evidence, caches the explanation only for the current result, and clears it when inputs change. If the recomputed evidence differs from the displayed prediction, it asks for a new prediction instead of showing an explanation for the wrong result.
+
+| Status | Meaning |
+|--------|---------|
+| `422` | Incomplete, nonnumeric, nonfinite, or unexpected input |
+| `429` | Provider quota exhausted; a numeric `Retry-After` is forwarded when available |
+| `502` | Provider unavailable, malformed/incomplete output, or a rejected evidence plan |
+| `503` | Models unavailable, no Gemini key, or rejected key/model configuration |
+| `504` | Provider or ML-service timeout |
+
+The Go proxy preserves these errors. The ML service keeps one pooled HTTPS connection to Gemini and retries a request exactly once, only when Gemini provably never processed it (connection failure or an immediate `503`); read timeouts, quota errors, and rejected plans are never retried, and there is no hardcoded "AI" fallback. Prediction results remain available if explanations fail. Logs contain the outcome code, requested model, and latency, not prompts, sample values, keys, or provider response bodies.
+
 ---
 
 ## 7. Frontend Pages
@@ -305,7 +336,7 @@ The response contains `score`, `grade` (`Specialty` at ≥ 80 points, otherwise 
 | Route | Description |
 |-------|-------------|
 | `/` | Landing page — hero, how-it-works flow, feature grid |
-| `/predict` | Quality predictor form with real-time SHAP explanation output |
+| `/predict` | Quality predictor form with SHAP attributions and optional Gemini-assisted explanations |
 | `/predict/roast` | Upload a bean photo → roast level prediction with confidence |
 | `/predict/defect` | Upload a bean photo → predicted defect type with confidence |
 | `/compare` | Side-by-side comparison of two coffee samples across all dimensions |
@@ -322,7 +353,25 @@ PYTHON_SERVICE_URL=http://localhost:8001
 PORT=8000
 ```
 
-`backend/main.go` also reads an `ANTHROPIC_API_KEY` variable, but nothing uses it yet — it is a placeholder for the LLM explanation item on the [roadmap](#13-roadmap).
+### ML service — `ml_service/.env` (optional)
+
+Create a key in [Google AI Studio](https://aistudio.google.com/apikey). To stay within free access, use a project **without billing enabled** and a model currently eligible for a free tier; check [pricing](https://ai.google.dev/gemini-api/docs/pricing) and your account's quotas. The model is configurable because availability and limits change.
+
+```bash
+cd ml_service
+cp .env.example .env
+# Edit .env locally; never paste or commit the key.
+uvicorn main:app --host 127.0.0.1 --port 8001 --env-file .env
+```
+
+```env
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-3.6-flash
+```
+
+The integration calls [Gemini's OpenAI-compatible endpoint](https://ai.google.dev/gemini-api/docs/openai) directly through `httpx`; an OpenAI account or subscription is not needed. `gemini-3.6-flash` is the default because it is the model Google's API currently points new users to and the one the live evaluation below was recorded with; if Gemini answers `503` under load, another `*-flash` model listed for your key can be set without code changes. Without a key, ordinary ML predictions still work and `/explain` reports `503`.
+
+**Privacy and deployment:** Google may use free-tier inputs and outputs to improve its products. Use public or synthetic coffee samples only. `.env` files are excluded from Git and the ML Docker build context; configure deployment secrets at runtime instead. Keep a public demo behind suitable access and rate controls: this project does not provide authentication or distributed abuse prevention, and provider quota errors are not a substitute for those controls.
 
 ### Frontend — `frontend/.env.local`
 
@@ -366,23 +415,56 @@ Stated plainly, so that nobody has to discover them in the notebooks:
 4. **The defect classifier has no "no defect" class.** The dataset contains only defective beans, so the model always returns one of the nine defect types and the API's `isDefective` flag is always `true` — the frontend's "No Defects Found" state is currently unreachable. Minority classes (`sour`, `immature`, `husk`) have 3–5 test images each, so their per-class F1 is unreliable.
 5. **Image models were trained on curated datasets.** Phone photos under uneven lighting are out-of-distribution; expect lower accuracy than reported.
 6. **Missing features are zero-filled.** `/predict` requires `Aroma`, `Flavor`, `Acidity`, `Body`, `Balance` and fills any other omitted training column with `0` — a value the model never saw for fields such as `Altitude` or `Uniformity`. Supply all 13 features for meaningful predictions.
-7. **Explanations are SHAP attributions, not prose.** The API returns the top-4 feature contributions with sign; plain-language summaries are not implemented.
+7. **Explanations use a constrained evidence plan.** Gemini selects points and approved wording styles; the server renders the prose from checked evidence. This limits unsupported additions, but does not fix model accuracy, validate farming interventions, or provide a conversational assistant.
 
 ---
 
 ## 11. Testing
 
-The FastAPI service has an API-layer test suite in [`ml_service/tests/`](ml_service/tests/) (26 tests, < 1 s). The trained models are replaced with small fakes, so the tests need neither TensorFlow nor the Git-LFS artifacts. They cover the response contract of every endpoint, SHAP top-4 selection and sign, zero-filling of omitted features in training column order, the 80-point specialty threshold, base64/image decoding, resizing to the model's input shape and normalisation to `[0, 1]`, grayscale → RGB conversion, the class-map lookups, and every error path (`400` / `422` / `503`).
+The FastAPI suite in [`ml_service/tests/`](ml_service/tests/) uses model fakes and a mocked Gemini HTTP transport. It covers the original prediction and image contracts, explanation input validation, plan rejection, numeric rendering, refusal/truncation handling, timeouts, missing credentials, and quota propagation. No API key, TensorFlow runtime, or Git-LFS artifact is required for these tests.
 
 ```bash
 cd ml_service
 pip install -r requirements-test.txt
 pytest -q
+python evaluate_explanations.py
 ```
 
-CI runs the same suite on Python 3.11 for every push and pull request touching `ml_service/` ([`.github/workflows/ml-service-tests.yml`](.github/workflows/ml-service-tests.yml)).
+The offline evaluator uses [`evals/explanation_cases.json`](ml_service/evals/explanation_cases.json): six synthetic evidence scenarios and 21 labeled acceptable/adversarial plans. It reports verdict accuracy, false acceptances, and false rejections, and exits nonzero on **any** mismatch. This measures the validator, not Gemini's generation quality.
 
-Not covered yet: the notebooks, the Go backend, the frontend, and an end-to-end run against the real model artifacts.
+To evaluate the real provider separately, configure an ignored `.env` and explicitly opt in:
+
+```bash
+# From ml_service; one synthetic case for a small live smoke test:
+python evaluate_explanations.py --live --env-file .env --case mixed_signs
+
+# Omit --case to evaluate all six scenarios; this consumes free-tier requests.
+python evaluate_explanations.py --live --env-file .env
+```
+
+Live mode reports the valid-plan rate and median latency, includes only accepted rendered explanations, and exits nonzero if any case fails or is unattempted. It stops after a quota error rather than retrying automatically. Neither live success nor offline acceptance is a claim that the base ML predictions are correct.
+
+Latest recorded live run (`gemini-3.6-flash`, free tier, from a high-latency network): 6/6 valid plans, median latency 3.0 s. An earlier run of the same day scored 5/6 because one connection to Google exceeded the then 5 s connect timeout; that failure motivated the pooled connection, the 10 s connect budget, and the single connect/503 retry described above. Live results vary with provider load and are not part of CI.
+
+Go proxy tests and browser tests:
+
+```bash
+cd backend
+go test ./...
+
+# From the repository root, in a separate shell:
+cd frontend
+npm ci
+npx playwright install chromium
+npm run build
+npm run test:e2e
+```
+
+Browser tests mock the prediction/explanation HTTP endpoints and exercise opt-in generation, evidence links, error/retry states, stale results, and mobile layout. They do not make Gemini calls.
+
+[CI](.github/workflows/ml-service-tests.yml) runs Python tests plus offline evaluation on Python 3.11, Go tests, and frontend build/browser checks for relevant pushes and pull requests. The offline JSON report is uploaded as a workflow artifact; CI never needs a Gemini key.
+
+Not covered by these checks: notebook retraining, real model accuracy, or an end-to-end run combining the real trained artifacts with a live Gemini call.
 
 ---
 
@@ -391,11 +473,11 @@ Not covered yet: the notebooks, the Go backend, the frontend, and an end-to-end 
 | Layer | Technologies |
 |-------|-------------|
 | **ML** | scikit-learn, XGBoost, SHAP, K-Means, TensorFlow / Keras, MobileNetV2 |
-| **ML Service** | FastAPI, Uvicorn, joblib, pytest |
+| **ML Service** | FastAPI, Uvicorn, joblib, httpx, Pydantic, pytest |
 | **Backend** | Go, Gin framework |
-| **Frontend** | Next.js 14, React 18, Tailwind CSS, Lucide icons |
+| **Frontend** | Next.js 14, React 18, Tailwind CSS, Lucide icons, Playwright |
 | **Data Sources** | Kaggle (CQI cupping data, coffee bean images), Roboflow Universe (defect images) |
-| **Explainability** | SHAP TreeExplainer |
+| **Explainability** | SHAP TreeExplainer, Gemini structured evidence plans, deterministic validation/rendering |
 
 ---
 
@@ -405,9 +487,8 @@ Not covered yet: the notebooks, the Go backend, the frontend, and an end-to-end 
 - [ ] Re-evaluate the roast classifier on data that was not used for model selection
 - [ ] Add a healthy-bean class so `isDefective` can actually be `false`; collect more `sour`, `immature`, and `husk` images
 - [ ] Predict Total Cup Points from non-sensory features only (the useful, hard version of the problem)
-- [ ] Plain-language explanations generated by an LLM from the SHAP attributions, with an automated check that the text stays faithful to the attributions
-- [ ] Propagate ML-service error codes (`400` / `422` / `503`) through the Go backend instead of returning them as `200`
-- [ ] Tests for the Go backend and an end-to-end smoke test against the real artifacts
+- [ ] Expand live explanation evaluation across model versions and repeated runs
+- [ ] An end-to-end smoke test combining the real trained artifacts and Gemini
 
 ---
 

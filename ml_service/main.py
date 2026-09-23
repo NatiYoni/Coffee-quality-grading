@@ -1,6 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from explanations import (
+    ExplainRequest, ExplanationError, ExplanationResponse, GeminiConfig,
+    evidence_from_prediction, generate_explanation,
+)
 import binascii, joblib, json, os, base64, logging
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
@@ -247,3 +251,20 @@ def predict_defect(req: PredictDefectRequest):
 @app.get("/regions")
 def get_regions():
     return regions_data
+
+
+@app.post("/explain", response_model=ExplanationResponse)
+def explain(req: ExplainRequest):
+    try:
+        config = GeminiConfig.from_env()
+        prediction = predict(PredictRequest(features=req.features))
+        evidence = evidence_from_prediction(prediction)
+        return generate_explanation(evidence, config)
+    except ExplanationError as exc:
+        logger.warning("Explanation unavailable: %s", exc.code)
+        headers = {"Retry-After": exc.retry_after} if exc.retry_after is not None else None
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": str(exc)},
+            headers=headers,
+        ) from exc

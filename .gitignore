@@ -16,5 +16,10 @@ build/
 
 # --- Secrets / local config ---
 .env
+.env.*
+!.env.example
 backend/.env
 .next/
+.pytest_cache/
+playwright-report/
+test-results/
