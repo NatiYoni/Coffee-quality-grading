@@ -7,4 +7,5 @@ pandas==2.2.0
 joblib==1.3.2
 Pillow==10.4.0
 httpx==0.27.2
+python-dotenv==1.0.1
 pytest==8.3.3

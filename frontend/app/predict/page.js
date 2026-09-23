@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Coffee, Plus, Trash2, Loader2, TrendingUp, Info, ChevronDown, ChevronUp } from 'lucide-react'
+import { Coffee, Plus, Trash2, Loader2, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
+import Explanation from './Explanation'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
 
@@ -45,8 +46,6 @@ function buildPayload(c) {
     'Moisture Percentage': parseFloat(c.moisture),
     'Category One Defects': parseInt(c.category_one_defects),
     'Category Two Defects': parseInt(c.category_two_defects),
-    Processing_Method: c.processing_method,
-    Country_of_Origin: c.country_of_origin,
   }
 }
 
@@ -120,8 +119,7 @@ function CoffeeForm({ coffee, index, total, onChange, onRemove }) {
   )
 }
 
-function ResultCard({ index, result }) {
-  const [showAI, setShowAI] = useState(false)
+function ResultCard({ index, result, features }) {
   return (
     <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
       <div className="px-5 py-3 border-b border-stone-100 bg-amber-50 flex items-center justify-between">
@@ -176,21 +174,7 @@ function ResultCard({ index, result }) {
           </div>
         )}
 
-        {/* AI explanation */}
-        <button onClick={() => setShowAI(!showAI)}
-          className="flex items-center gap-1 text-xs text-amber-700 font-semibold hover:underline mb-2">
-          <Info className="w-3.5 h-3.5" />
-          {showAI ? 'Hide' : 'Show'} AI Explanation
-        </button>
-        {showAI && (
-          <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 text-xs text-stone-700 leading-relaxed">
-            This coffee scored <strong>{result.score}</strong> points — classified as{' '}
-            <strong>{result.grade}</strong> grade.
-            {result.flavorCluster && <> It belongs to the <strong>{result.flavorCluster.name}</strong> flavor family ({result.flavorCluster.description}).</>}
-            {' '}The top factors driving this score are shown above.
-            {result.counterfactual && ` ${result.counterfactual.suggestion}`}
-          </div>
-        )}
+        <Explanation key={JSON.stringify([result, features])} result={result} features={features} />
       </div>
     </div>
   )
@@ -211,6 +195,7 @@ export default function PredictPage() {
 
   const updateField = (id, field, value) => {
     setCoffees(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c))
+    setResults([])
   }
 
   const handleSubmit = async (e) => {
@@ -218,13 +203,16 @@ export default function PredictPage() {
     setLoading(true); setError(''); setResults([])
     try {
       const responses = await Promise.all(
-        coffees.map(c =>
-          fetch(`${API_URL}/predict`, {
+        coffees.map(async c => {
+          const features = buildPayload(c)
+          const response = await fetch(`${API_URL}/predict`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ features: buildPayload(c) }),
-          }).then(r => { if (!r.ok) throw new Error('Prediction failed'); return r.json() })
-        )
+            body: JSON.stringify({ features }),
+          })
+          if (!response.ok) throw new Error('Prediction failed')
+          return { prediction: await response.json(), features }
+        })
       )
       setResults(responses)
     } catch (e) {
@@ -292,7 +280,7 @@ export default function PredictPage() {
             </p>
             <div className={`grid gap-4 ${results.length > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 max-w-md'}`}>
               {results.map((r, i) => (
-                <ResultCard key={i} index={i} result={r} />
+                <ResultCard key={i} index={i} result={r.prediction} features={r.features} />
               ))}
             </div>
           </div>

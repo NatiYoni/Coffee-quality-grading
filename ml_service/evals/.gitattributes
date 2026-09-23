@@ -1,0 +1,2 @@
+# Evaluation datasets are small, reviewable text, unlike the LFS-tracked model artifacts.
+*.json -filter !diff !merge text
