@@ -1,10 +1,13 @@
-name: ml_service tests
+name: Coffee application checks
 
 on:
   push:
-    paths: ["ml_service/**", ".github/workflows/ml-service-tests.yml"]
+    paths: ["ml_service/**", "backend/**", "frontend/**", ".github/workflows/ml-service-tests.yml"]
   pull_request:
-    paths: ["ml_service/**", ".github/workflows/ml-service-tests.yml"]
+    paths: ["ml_service/**", "backend/**", "frontend/**", ".github/workflows/ml-service-tests.yml"]
+
+permissions:
+  contents: read
 
 jobs:
   pytest:
@@ -21,3 +24,44 @@ jobs:
           cache-dependency-path: ml_service/requirements-test.txt
       - run: pip install -r requirements-test.txt
       - run: pytest -q
+      - run: python evaluate_explanations.py > explanation-eval.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: offline-explanation-evaluation
+          path: ml_service/explanation-eval.json
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: go test ./...
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-results
+          path: frontend/test-results/
