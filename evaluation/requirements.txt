@@ -1,0 +1,9 @@
+# Isolated CPU evaluation; do not install the inference/LLM/CNN stack.
+numpy==2.2.6
+pandas==2.2.3
+scikit-learn==1.7.2
+threadpoolctl==3.6.0
+xgboost-cpu==3.2.0
+# Pin the resolved numerical transitive dependencies used by the reference run.
+scipy==1.18.1
+joblib==1.6.0

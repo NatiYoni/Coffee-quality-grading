@@ -3,6 +3,8 @@
 
 > Predicts specialty coffee quality scores from cupping data, classifies roast levels and defects from bean imagery, segments flavor profiles via clustering, and explains every prediction in plain language — with a full-stack web application for producers, buyers, and researchers.
 
+**Evaluation evidence:** See the [local regression evaluation guide](evaluation/README.md) for reproducible commands and leakage limitations. The raw CQI CSV is not included in this checkout. The new evaluator's synthetic-fixture tests are not a new coffee benchmark; the performance figures below remain historical notebook claims.
+
 ---
 
 ## Table of Contents
@@ -117,14 +119,14 @@ Predicts the **Total Cup Points** (SCA specialty coffee score, 0–100) from cup
 
 | Property | Detail |
 |----------|--------|
-| Target variable | `Total.Cup.Points` (range 78–89.3, mean 83.71) |
-| Training samples | 207 rows (155 train / 52 test) |
-| Features (13) | Altitude, Aroma, Flavor, Aftertaste, Acidity, Body, Balance, Uniformity, Clean Cup, Sweetness, Moisture, Defects, Processing Method |
+| Target variable | `Total Cup Points` (historical range 78–89.3, mean 83.71) |
+| Training samples (historical) | 207 rows (155 train / 52 test) |
+| Features (served manifest, 13) | Altitude, Aroma, Flavor, Aftertaste, Acidity, Body, Balance, Uniformity, Clean Cup, Sweetness, Moisture Percentage, Category One Defects, Category Two Defects |
 | Baseline | Linear Regression (Test R² = 0.994, RMSE = 0.128) |
 | Best model | XGBoost with GridSearchCV — `max_depth=3`, `n_estimators=300`, `learning_rate=0.05` |
 | Explainability | SHAP `TreeExplainer` — per-prediction feature impact |
 
-**Key finding:** Linear Regression outperforms XGBoost on this dataset due to the near-linear additive structure of SCA cupping sub-scores. XGBoost shows mild overfitting at this dataset size. The SHAP analysis confirms Flavor (r = 0.94), Aftertaste (r = 0.93), and Balance (r = 0.93) as the dominant quality drivers.
+**Historical notebook finding:** Linear Regression outperforms XGBoost on this dataset due to the near-linear additive structure of SCA cupping sub-scores. XGBoost shows mild overfitting at this dataset size. The SHAP analysis reports Flavor (r = 0.94), Aftertaste (r = 0.93), and Balance (r = 0.93) as strongly associated with the total score. These are target-related cupping components, not evidence of causal quality drivers or forecasting before cupping.
 
 ### 4.2 Roast Level Classifier — MobileNetV2 CNN
 
@@ -321,9 +323,11 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/api
 
 ## 9. Results & Performance
 
-### Model Summary
+These are preserved **historical notebook results**, not an independently reproduced benchmark. The legacy status labels are not readiness or deployment verification. The [local evaluation guide](evaluation/README.md) explains the missing-data boundary, train-only preprocessing, grouped split, baseline, and arithmetic diagnostic; it does not validate these figures or live inference.
 
-| Model | Type | Key Metric | Score | Status |
+### Historical Model Summary
+
+| Model | Type | Key Metric | Score | Historical status |
 |-------|------|-----------|-------|--------|
 | Quality Scorer (Linear Regression) | Regression | Test R² | 0.994 | ✅ Production Ready |
 | Quality Scorer (XGBoost) | Regression | Test R² | 0.960 | ⚠️ Needs more data |

@@ -18,3 +18,8 @@ build/
 .env
 backend/.env
 .next/
+
+# Local evaluation inputs and outputs (never publish source rows).
+.venv-evaluation/
+data/coffee-quality/
+.evaluation-output/
